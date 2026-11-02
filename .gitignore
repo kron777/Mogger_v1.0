@@ -1,0 +1,18 @@
+# secrets
+.env
+.env.*
+
+# generated/regenerable Scryfall card dump
+cards.json
+cards.json.gz
+*.jsonl.gz
+
+# personal match history (Jon's own data - excluded by default)
+history.json
+report.txt
+
+# python
+__pycache__/
+*.pyc
+venv/
+.venv/

@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>MTGA // MATCH LOG</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=UnifrakturMaguntia&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #05070d;
+    --panel: #0b1220;
+    --panel-edge: #1b2740;
+    --cyan: #4ff3e0;
+    --cyan-dim: #1d5c58;
+    --magenta: #ff4fd8;
+    --amber: #ffb84f;
+    --red: #ff5370;
+    --green: #5dffa0;
+    --text: #cfe8ea;
+    --text-dim: #6c8894;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: radial-gradient(circle at 20% 0%, #0d1830 0%, var(--bg) 55%);
+    color: var(--text);
+    font-family: "SF Mono", "Consolas", "Cascadia Code", monospace;
+    overflow-x: hidden;
+  }
+  body::before {
+    content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background-image: repeating-linear-gradient(0deg, rgba(79,243,224,0.025) 0px, rgba(79,243,224,0.025) 1px, transparent 1px, transparent 3px);
+  }
+  header {
+    position: relative; z-index: 1;
+    padding: 18px 28px; border-bottom: 1px solid var(--panel-edge);
+    display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 12px;
+  }
+  header h1 {
+    margin: 0; font-family: 'UnifrakturMaguntia', 'SF Mono', cursive; font-size: 36px;
+    font-weight: 400; letter-spacing: 1px; line-height: 1.1; padding-bottom: 4px;
+    background: linear-gradient(180deg, #fdf3cf 0%, #f0cf78 30%, #d9a53f 55%, #9c6a22 80%, #7a4f1a 100%);
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent;
+    text-shadow:
+      0 1px 0 rgba(255,250,225,0.35),
+      1px 2px 1px rgba(0,0,0,0.55),
+      2px 3px 3px rgba(0,0,0,0.6),
+      0 0 16px rgba(222,166,70,0.45),
+      0 0 32px rgba(190,130,40,0.25);
+  }
+  #stats { display: flex; gap: 22px; font-size: 13px; letter-spacing: 1px; color: var(--text-dim); }
+  #stats b { color: var(--text); font-size: 15px; }
+  #stats .win { color: var(--green); }
+  #stats .loss { color: var(--red); }
+  main {
+    position: relative; z-index: 1;
+    display: grid; grid-template-columns: 340px 1fr 320px;
+    gap: 16px; padding: 16px 20px; align-items: start;
+  }
+  @media (max-width: 1050px) { main { grid-template-columns: 1fr; } }
+  .panel {
+    background: linear-gradient(180deg, rgba(27,39,64,0.35), rgba(11,18,32,0.6));
+    border: 1px solid var(--panel-edge); border-radius: 6px;
+    box-shadow: 0 0 0 1px rgba(79,243,224,0.04), 0 8px 30px rgba(0,0,0,0.4);
+    overflow: hidden;
+  }
+  .panel h2 {
+    margin: 0; padding: 10px 14px; font-size: 12px; letter-spacing: 3px;
+    color: var(--cyan); border-bottom: 1px solid var(--panel-edge);
+    text-shadow: 0 0 6px rgba(79,243,224,0.4);
+  }
+  .panel-body { padding: 8px; max-height: 76vh; overflow-y: auto; }
+  .panel-body::-webkit-scrollbar { width: 6px; }
+  .panel-body::-webkit-scrollbar-thumb { background: var(--cyan-dim); border-radius: 3px; }
+
+  .match-row {
+    padding: 9px 10px; margin-bottom: 4px; border-radius: 4px; cursor: pointer;
+    border: 1px solid transparent; transition: background .12s, border-color .12s;
+    display: flex; flex-direction: column; gap: 2px;
+  }
+  .match-row:hover { background: rgba(79,243,224,0.06); border-color: var(--panel-edge); }
+  .match-row.active { background: rgba(79,243,224,0.1); border-color: var(--cyan-dim); }
+  .match-row .top { display: flex; justify-content: space-between; font-size: 13px; }
+  .match-row .opp { font-weight: 600; }
+  .match-row .result { font-weight: 700; letter-spacing: 1px; }
+  .match-row .result.WIN { color: var(--green); text-shadow: 0 0 6px rgba(93,255,160,0.5); }
+  .match-row .result.LOSS { color: var(--red); text-shadow: 0 0 6px rgba(255,83,112,0.5); }
+  .match-row .meta { font-size: 11px; color: var(--text-dim); display: flex; justify-content: space-between; }
+
+  #empty-state { padding: 40px 20px; color: var(--text-dim); text-align: center; font-size: 13px; line-height: 1.6; }
+
+  .timeline { padding: 16px 10px 16px 18px; position: relative; }
+  .timeline::before {
+    content: ""; position: absolute; left: 24px; top: 10px; bottom: 10px; width: 2px;
+    background: linear-gradient(180deg, var(--cyan-dim), transparent);
+  }
+  .play {
+    position: relative; margin-left: 28px; margin-bottom: 14px; padding: 8px 12px;
+    border-radius: 4px; border: 1px solid var(--panel-edge); background: rgba(11,18,32,0.5);
+    font-size: 13px; animation: fadein .25s ease-out;
+  }
+  @keyframes fadein { from { opacity: 0; transform: translateX(-4px); } to { opacity: 1; transform: none; } }
+  .play::before {
+    content: ""; position: absolute; left: -32px; top: 12px; width: 9px; height: 9px; border-radius: 50%;
+    background: var(--panel); border: 2px solid var(--cyan);
+  }
+  .play.mine::before { border-color: var(--magenta); }
+  .play.mine { border-left: 2px solid rgba(255,79,216,0.4); }
+  .play.opp { border-left: 2px solid rgba(79,243,224,0.4); }
+  .play .turn { color: var(--text-dim); font-size: 11px; letter-spacing: 1px; margin-right: 8px; }
+  .play .who { font-size: 11px; letter-spacing: 1px; padding: 1px 6px; border-radius: 3px; margin-right: 6px; }
+  .play.mine .who { background: rgba(255,79,216,0.15); color: var(--magenta); }
+  .play.opp .who { background: rgba(79,243,224,0.15); color: var(--cyan); }
+  .play .card { font-weight: 600; }
+  .play .zonecat { float: right; font-size: 11px; color: var(--text-dim); }
+  .play .zonecat .zone-Battlefield { color: var(--green); }
+  .play .zonecat .zone-Stack { color: var(--amber); }
+  .play .zonecat .zone-Graveyard { color: var(--text-dim); }
+  .play .zonecat .zone-Exile { color: var(--magenta); }
+
+  .threat-row { padding: 7px 10px; font-size: 12px; display: flex; align-items: center; gap: 8px; }
+  .threat-row .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .threat-bar-track { width: 60px; height: 6px; background: #0e1930; border-radius: 3px; overflow: hidden; flex-shrink: 0; }
+  .threat-bar-fill { height: 100%; background: linear-gradient(90deg, var(--amber), var(--red)); }
+  .threat-row .count { color: var(--text-dim); font-size: 11px; width: 42px; text-align: right; flex-shrink: 0; }
+
+  .detail-header { padding: 12px 16px; border-bottom: 1px solid var(--panel-edge); }
+  .detail-header .vs { font-size: 15px; font-weight: 700; }
+  .detail-header .vs .result-tag { padding: 1px 8px; border-radius: 3px; font-size: 11px; margin-right: 8px; letter-spacing: 1px; }
+  .detail-header .vs .result-tag.WIN { background: rgba(93,255,160,0.15); color: var(--green); }
+  .detail-header .vs .result-tag.LOSS { background: rgba(255,83,112,0.15); color: var(--red); }
+  .detail-header .sub { font-size: 11px; color: var(--text-dim); margin-top: 4px; }
+
+  footer { text-align: center; color: var(--text-dim); font-size: 11px; padding: 10px; letter-spacing: 1px; }
+
+  #mogger-btn {
+    background: linear-gradient(180deg, rgba(79,243,224,0.12), rgba(79,243,224,0.04));
+    border: 1px solid var(--cyan-dim); color: var(--cyan); font-family: inherit;
+    font-size: 12px; letter-spacing: 2px; padding: 9px 16px; border-radius: 4px; cursor: pointer;
+    text-shadow: 0 0 6px rgba(79,243,224,0.5); transition: background .15s, box-shadow .15s;
+  }
+  #mogger-btn:hover { background: rgba(79,243,224,0.18); box-shadow: 0 0 14px rgba(79,243,224,0.25); }
+  #mogger-btn:disabled { opacity: 0.5; cursor: wait; }
+
+  #mogger-overlay {
+    display: none; position: fixed; inset: 0; z-index: 50; background: rgba(2,4,10,0.75);
+    align-items: center; justify-content: center; padding: 24px;
+  }
+  #mogger-overlay.open { display: flex; }
+  #mogger-modal {
+    width: min(760px, 100%); max-height: 86vh; overflow-y: auto;
+    background: linear-gradient(180deg, rgba(20,30,50,0.97), rgba(8,13,24,0.98));
+    border: 1px solid var(--cyan-dim); border-radius: 8px;
+    box-shadow: 0 0 40px rgba(79,243,224,0.15), 0 20px 60px rgba(0,0,0,0.6);
+  }
+  #mogger-modal .mg-head {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 14px 18px; border-bottom: 1px solid var(--panel-edge);
+  }
+  #mogger-modal .mg-head h2 {
+    margin: 0; font-size: 14px; letter-spacing: 3px; color: var(--cyan);
+    text-shadow: 0 0 8px rgba(79,243,224,0.5);
+  }
+  #mogger-close { background: none; border: none; color: var(--text-dim); font-size: 20px; cursor: pointer; line-height: 1; }
+  #mogger-close:hover { color: var(--red); }
+  #mogger-body { padding: 18px; font-size: 13px; }
+  #mogger-body .mg-loading { text-align: center; padding: 50px 10px; color: var(--cyan); letter-spacing: 2px; animation: pulse 1.4s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity: 0.4; } 50% { opacity: 1; } }
+  #mogger-body .mg-error { color: var(--red); padding: 20px; text-align: center; }
+  .mg-archetype { font-size: 16px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+  .mg-archetype .tier-tag { font-size: 11px; color: var(--amber); border: 1px solid var(--amber); border-radius: 3px; padding: 1px 6px; margin-left: 8px; letter-spacing: 1px; vertical-align: 2px; }
+  .mg-archetype .path-tag { font-size: 10px; border-radius: 3px; padding: 1px 6px; margin-left: 8px; letter-spacing: 1px; vertical-align: 2px; }
+  .path-tag.path-ai { color: var(--magenta); border: 1px solid var(--magenta); }
+  .path-tag.path-fallback { color: var(--text-dim); border: 1px solid var(--text-dim); }
+  .mg-source { font-size: 11px; color: var(--text-dim); margin-bottom: 12px; }
+  .mg-source a { color: var(--cyan); }
+  .mg-reasoning { background: rgba(79,243,224,0.05); border-left: 2px solid var(--cyan-dim); padding: 10px 12px; margin-bottom: 14px; line-height: 1.5; color: var(--text); }
+  .mg-unverified { background: rgba(255,184,79,0.08); border-left: 2px solid var(--amber); padding: 10px 12px; margin-bottom: 14px; font-size: 12px; color: var(--amber); }
+  .mg-missing-list { max-height: 110px; overflow-y: auto; margin-top: 6px; font-size: 11px; color: var(--text-dim); columns: 2; }
+  .mg-decklist-wrap { position: relative; margin-top: 10px; }
+  #mogger-decklist {
+    width: 100%; height: 280px; background: #060a14; color: var(--text); border: 1px solid var(--panel-edge);
+    border-radius: 4px; font-family: inherit; font-size: 12px; padding: 10px; resize: vertical; line-height: 1.5;
+  }
+  #mogger-copy {
+    position: absolute; top: 8px; right: 8px; background: var(--cyan-dim); color: #05070d; border: none;
+    font-family: inherit; font-size: 11px; letter-spacing: 1px; padding: 5px 10px; border-radius: 3px; cursor: pointer;
+  }
+  #mogger-copy:hover { background: var(--cyan); }
+  #mogger-copy.copied { background: var(--green); }
+
+  .mg-form { display: flex; flex-direction: column; gap: 14px; padding: 10px 2px 4px; }
+  .mg-field { display: flex; flex-direction: column; gap: 5px; font-size: 11px; letter-spacing: 2px; color: var(--text-dim); }
+  .mg-field select, .mg-field input {
+    background: #060a14; color: var(--text); border: 1px solid var(--panel-edge); border-radius: 4px;
+    font-family: inherit; font-size: 13px; padding: 8px 10px; letter-spacing: normal;
+  }
+  .mg-field select:focus, .mg-field input:focus { outline: none; border-color: var(--cyan-dim); }
+  #mg-build-btn {
+    background: linear-gradient(180deg, rgba(79,243,224,0.18), rgba(79,243,224,0.06));
+    border: 1px solid var(--cyan-dim); color: var(--cyan); font-family: inherit; font-size: 13px;
+    letter-spacing: 2px; padding: 11px; border-radius: 4px; cursor: pointer; margin-top: 4px;
+    text-shadow: 0 0 6px rgba(79,243,224,0.5);
+  }
+  #mg-build-btn:hover { background: rgba(79,243,224,0.22); }
+  .mg-btn-row { display: flex; gap: 10px; margin-top: 4px; }
+  .mg-btn-row #mg-build-btn { flex: 1; margin-top: 0; }
+  .mg-btn-secondary {
+    flex: 1; background: none; border: 1px solid var(--panel-edge); color: var(--text-dim);
+    font-family: inherit; font-size: 12px; letter-spacing: 1px; padding: 11px; border-radius: 4px; cursor: pointer;
+  }
+  .mg-btn-secondary:hover { border-color: var(--text-dim); color: var(--text); }
+  .path-tag.path-prompt { color: var(--amber); border: 1px solid var(--amber); }
+
+  .mg-colors { display: flex; gap: 8px; }
+  .mg-color-btn {
+    background: #060a14; border: 1px solid var(--panel-edge); border-radius: 50%;
+    width: 36px; height: 36px; padding: 6px; cursor: pointer; opacity: 0.55; transition: all .12s;
+  }
+  .mg-color-btn img { width: 100%; height: 100%; display: block; }
+  .mg-color-btn:hover { opacity: 0.85; border-color: var(--cyan-dim); }
+  .mg-color-btn.active { opacity: 1; border-color: var(--cyan); box-shadow: 0 0 10px rgba(79,243,224,0.4); background: rgba(79,243,224,0.08); }
+  .mg-back {
+    display: block; margin-top: 14px; background: none; border: none; color: var(--text-dim);
+    font-family: inherit; font-size: 11px; letter-spacing: 1px; cursor: pointer; padding: 6px 0;
+  }
+  .mg-back:hover { color: var(--cyan); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Mogger v1.0</h1>
+  <div id="stats">
+    <div>RECORD <b id="stat-record">--</b></div>
+    <div>WINRATE <b id="stat-winrate">--</b></div>
+    <div>PLAYER <b id="stat-player">--</b></div>
+  </div>
+  <button id="mogger-btn">⚔ CONSTRUCT DECK</button>
+</header>
+
+<div id="mogger-overlay">
+  <div id="mogger-modal">
+    <div class="mg-head">
+      <h2>MOGGER // DECK CONSTRUCT</h2>
+      <button id="mogger-close">&times;</button>
+    </div>
+    <div id="mogger-body"></div>
+  </div>
+</div>
+
+<main>
+  <section class="panel">
+    <h2>MATCHES</h2>
+    <div class="panel-body" id="match-list"><div id="empty-state">no matches yet</div></div>
+  </section>
+
+  <section class="panel">
+    <div class="detail-header" id="detail-header" style="display:none;">
+      <div class="vs"></div>
+      <div class="sub"></div>
+    </div>
+    <h2 id="timeline-title" style="display:none;">PLAY-BY-PLAY</h2>
+    <div class="panel-body timeline" id="timeline" style="max-height:72vh;">
+      <div id="empty-timeline" style="padding:40px 20px;color:var(--text-dim);text-align:center;font-size:13px;">select a match to see the timeline</div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>THREAT INDEX</h2>
+    <div class="panel-body" id="threat-list"><div id="empty-threat" style="padding:30px 14px;color:var(--text-dim);font-size:12px;text-align:center;">no data yet</div></div>
+  </section>
+</main>
+
+<footer>polling history.json every 5s</footer>
+
+<script>
+const BASICS = new Set(["Plains","Island","Swamp","Mountain","Forest"]);
+let history = [];
+let selectedMatch = null;
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+
+function renderStats() {
+  const losses = history.filter(m => m.result === "LOSS").length;
+  const wins = history.length - losses;
+  document.getElementById("stat-record").innerHTML =
+    `<span class="win">${wins}W</span>-<span class="loss">${losses}L</span>`;
+  document.getElementById("stat-winrate").textContent =
+    history.length ? Math.round(100 * wins / history.length) + "%" : "--";
+  const lastWithOpp = history.slice().reverse().find(m => m.plays && m.plays.length);
+  document.getElementById("stat-player").textContent =
+    lastWithOpp ? (lastWithOpp.plays.find(p => p.mine) || {}).player || "--" : "--";
+}
+
+function renderMatchList() {
+  const el = document.getElementById("match-list");
+  if (!history.length) { el.innerHTML = '<div id="empty-state">no matches yet</div>'; return; }
+  el.innerHTML = history.slice().reverse().map(m => `
+    <div class="match-row ${selectedMatch === m.match ? 'active' : ''}" data-match="${escapeHtml(m.match)}">
+      <div class="top">
+        <span class="opp">${escapeHtml(m.opponent)}</span>
+        <span class="result ${m.result}">${m.result}</span>
+      </div>
+      <div class="meta">
+        <span>${escapeHtml(m.event || "casual")}</span>
+        <span>${escapeHtml(m.time)}</span>
+      </div>
+    </div>
+  `).join("");
+  el.querySelectorAll(".match-row").forEach(row => {
+    row.addEventListener("click", () => { selectedMatch = row.dataset.match; render(); });
+  });
+}
+
+function renderTimeline() {
+  const header = document.getElementById("detail-header");
+  const title = document.getElementById("timeline-title");
+  const el = document.getElementById("timeline");
+  const m = history.find(x => x.match === selectedMatch);
+  if (!m) {
+    header.style.display = "none"; title.style.display = "none";
+    el.innerHTML = '<div id="empty-timeline" style="padding:40px 20px;color:var(--text-dim);text-align:center;font-size:13px;">select a match to see the timeline</div>';
+    return;
+  }
+  header.style.display = "block"; title.style.display = "block";
+  header.querySelector(".vs").innerHTML =
+    `<span class="result-tag ${m.result}">${m.result}</span>vs ${escapeHtml(m.opponent)}`;
+  header.querySelector(".sub").textContent = `${m.event || "casual"} · ${m.time}`;
+  const plays = m.plays || [];
+  if (!plays.length) {
+    el.innerHTML = '<div style="padding:30px 20px;color:var(--text-dim);text-align:center;font-size:13px;">no play-by-play captured for this match<br>(may predate the zone tracker)</div>';
+    return;
+  }
+  el.innerHTML = plays.map(p => `
+    <div class="play ${p.mine ? 'mine' : 'opp'}">
+      <span class="turn">T${p.turn}</span>
+      <span class="who">${p.mine ? "YOU" : "OPP"}</span>
+      <span class="card">${escapeHtml(p.card)}</span>
+      <span class="zonecat"><span class="zone-${escapeHtml(p.zone)}">${escapeHtml(p.zone)}</span>${p.category ? " · " + escapeHtml(p.category) : ""}</span>
+    </div>
+  `).join("");
+}
+
+function renderThreatIndex() {
+  const el = document.getElementById("threat-list");
+  const lossCount = {}, seenCount = {};
+  for (const m of history) {
+    for (const c of (m.opp_cards || [])) {
+      if (BASICS.has(c)) continue;
+      seenCount[c] = (seenCount[c] || 0) + 1;
+      if (m.result === "LOSS") lossCount[c] = (lossCount[c] || 0) + 1;
+    }
+  }
+  const ranked = Object.keys(lossCount).sort((a, b) => lossCount[b] - lossCount[a]).slice(0, 25);
+  if (!ranked.length) { el.innerHTML = '<div id="empty-threat" style="padding:30px 14px;color:var(--text-dim);font-size:12px;text-align:center;">no losses tracked yet</div>'; return; }
+  const max = lossCount[ranked[0]];
+  el.innerHTML = ranked.map(c => `
+    <div class="threat-row">
+      <span class="name" title="${escapeHtml(c)}">${escapeHtml(c)}</span>
+      <div class="threat-bar-track"><div class="threat-bar-fill" style="width:${100 * lossCount[c] / max}%"></div></div>
+      <span class="count">${lossCount[c]}/${seenCount[c]}</span>
+    </div>
+  `).join("");
+}
+
+function render() {
+  renderStats();
+  renderMatchList();
+  renderTimeline();
+  renderThreatIndex();
+}
+
+async function poll() {
+  try {
+    const res = await fetch("history.json", { cache: "no-store" });
+    const data = await res.json();
+    history = Array.isArray(data) ? data : [];
+    if (!selectedMatch && history.length) selectedMatch = history[history.length - 1].match;
+    render();
+  } catch (e) {
+    console.error("failed to load history.json", e);
+  }
+}
+
+poll();
+setInterval(poll, 5000);
+
+const moggerBtn = document.getElementById("mogger-btn");
+const moggerOverlay = document.getElementById("mogger-overlay");
+const moggerBody = document.getElementById("mogger-body");
+const moggerClose = document.getElementById("mogger-close");
+
+let moggerFormats = null;
+
+function openMogger() {
+  moggerOverlay.classList.add("open");
+  renderMoggerForm();
+}
+function closeMogger() { moggerOverlay.classList.remove("open"); }
+moggerClose.addEventListener("click", closeMogger);
+moggerOverlay.addEventListener("click", e => { if (e.target === moggerOverlay) closeMogger(); });
+moggerBtn.addEventListener("click", openMogger);
+
+async function renderMoggerForm() {
+  moggerBody.innerHTML = '<div class="mg-loading">LOADING FORMATS...</div>';
+  try {
+    if (!moggerFormats) {
+      const res = await fetch("/api/formats", { cache: "no-store" });
+      moggerFormats = await res.json();
+    }
+  } catch (e) {
+    moggerBody.innerHTML = `<div class="mg-error">couldn't load formats: ${escapeHtml(e.message)}</div>`;
+    return;
+  }
+  const keys = Object.keys(moggerFormats);
+  const defaultKey = keys.includes("historic") ? "historic" : keys[0];
+  moggerBody.innerHTML = `
+    <div class="mg-form">
+      <label class="mg-field">FORMAT
+        <select id="mg-format">${keys.map(k => `<option value="${escapeHtml(k)}" ${k === defaultKey ? "selected" : ""}>${escapeHtml(moggerFormats[k].label)}</option>`).join("")}</select>
+      </label>
+      <label class="mg-field">DECK NAME (optional)
+        <input id="mg-name" type="text" maxlength="60" placeholder="e.g. Jund Sorin v2">
+      </label>
+      <label class="mg-field">DECK SIZE
+        <input id="mg-size" type="number">
+      </label>
+      <label class="mg-field">COLOR IDENTITY (optional - none selected = any colors)
+        <div class="mg-colors" id="mg-colors">
+          ${["W","U","B","R","G"].map(c => `<button type="button" class="mg-color-btn" data-color="${c}"><img src="https://svgs.scryfall.io/card-symbols/${c}.svg" alt="${c}"></button>`).join("")}
+        </div>
+      </label>
+      <div class="mg-btn-row">
+        <button id="mg-build-btn">⚔ BUILD NOW</button>
+        <button id="mg-prompt-btn" class="mg-btn-secondary">📋 GENERATE PROMPT</button>
+      </div>
+    </div>
+  `;
+  const formatSel = document.getElementById("mg-format");
+  const sizeInput = document.getElementById("mg-size");
+  function syncSizeMin() {
+    const minSize = moggerFormats[formatSel.value].min_size;
+    sizeInput.min = minSize;
+    if (!sizeInput.value || Number(sizeInput.value) < minSize) sizeInput.value = minSize;
+  }
+  formatSel.addEventListener("change", syncSizeMin);
+  sizeInput.addEventListener("change", syncSizeMin);
+  syncSizeMin();
+
+  const selectedColors = new Set();
+  document.querySelectorAll(".mg-color-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const c = btn.dataset.color;
+      if (selectedColors.has(c)) { selectedColors.delete(c); btn.classList.remove("active"); }
+      else { selectedColors.add(c); btn.classList.add("active"); }
+    });
+  });
+
+  function readForm() {
+    const format = formatSel.value;
+    const name = document.getElementById("mg-name").value.trim();
+    const minSize = moggerFormats[format].min_size;
+    const size = Math.max(Number(sizeInput.value) || minSize, minSize);
+    const colors = Array.from(selectedColors);
+    return { format, name, size, colors };
+  }
+  document.getElementById("mg-build-btn").addEventListener("click", () => {
+    const { format, name, size, colors } = readForm();
+    buildDeck(format, name, size, colors);
+  });
+  document.getElementById("mg-prompt-btn").addEventListener("click", () => {
+    const { format, name, size, colors } = readForm();
+    generatePrompt(format, name, size, colors);
+  });
+}
+
+async function generatePrompt(format, name, size, colors) {
+  moggerBody.innerHTML = '<div class="mg-loading">ASSEMBLING PROMPT...</div>';
+  try {
+    const qs = new URLSearchParams({ format, size: String(size) });
+    if (name) qs.set("name", name);
+    if (colors && colors.length) qs.set("colors", colors.join(","));
+    const res = await fetch(`/api/construct-deck-prompt?${qs.toString()}`, { cache: "no-store" });
+    const data = await res.json();
+    if (!res.ok || data.error) {
+      moggerBody.innerHTML = `<div class="mg-error">prompt generation failed: ${escapeHtml(data.error || res.status)}</div>
+        <button id="mg-back-btn" class="mg-back">&larr; back</button>`;
+      document.getElementById("mg-back-btn").addEventListener("click", renderMoggerForm);
+      return;
+    }
+    moggerBody.innerHTML = `
+      <div class="mg-archetype">Generated Prompt <span class="path-tag path-prompt">📋 PASTE ELSEWHERE</span></div>
+      <div class="mg-source">${escapeHtml(data.format)} &middot; ${escapeHtml(String(data.size))} cards &middot; no API call made, nothing validated yet</div>
+      <div class="mg-reasoning">This is a plain prompt grounded in your real match data - paste it into Claude (or any capable model) and its reply should come close to a directly importable decklist, since it ends with the same hard constraints (exact size, 4-copy cap, format legality, Arena import format) the AI-direct path enforces. Nothing here has been checked against the validator - treat the reply as a draft to review, not a confirmed-legal deck.</div>
+      <div class="mg-decklist-wrap">
+        <button id="mogger-copy">COPY</button>
+        <textarea id="mogger-decklist" readonly spellcheck="false">${escapeHtml(data.prompt_text || "")}</textarea>
+      </div>
+      <button id="mg-back-btn" class="mg-back">&larr; build another</button>
+    `;
+    document.getElementById("mg-back-btn").addEventListener("click", renderMoggerForm);
+    document.getElementById("mogger-copy").addEventListener("click", async (e) => {
+      const ta = document.getElementById("mogger-decklist");
+      try { await navigator.clipboard.writeText(ta.value); }
+      catch (err) { ta.select(); document.execCommand("copy"); }
+      e.target.textContent = "COPIED";
+      e.target.classList.add("copied");
+      setTimeout(() => { e.target.textContent = "COPY"; e.target.classList.remove("copied"); }, 1500);
+    });
+  } catch (e) {
+    moggerBody.innerHTML = `<div class="mg-error">request failed: ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+async function buildDeck(format, name, size, colors) {
+  moggerBody.innerHTML = '<div class="mg-loading">SCANNING LADDER METAGAME...</div>';
+  moggerBtn.disabled = true;
+  try {
+    const qs = new URLSearchParams({ format, size: String(size) });
+    if (name) qs.set("name", name);
+    if (colors && colors.length) qs.set("colors", colors.join(","));
+    const res = await fetch(`/api/construct-deck?${qs.toString()}`, { cache: "no-store" });
+    const data = await res.json();
+    if (!res.ok || data.error) {
+      moggerBody.innerHTML = `<div class="mg-error">construct-deck failed: ${escapeHtml(data.error || res.status)}</div>
+        <button id="mg-back-btn" class="mg-back">&larr; back</button>`;
+      document.getElementById("mg-back-btn").addEventListener("click", renderMoggerForm);
+      return;
+    }
+    renderMogger(data);
+  } catch (e) {
+    moggerBody.innerHTML = `<div class="mg-error">request failed: ${escapeHtml(e.message)}</div>`;
+  } finally {
+    moggerBtn.disabled = false;
+  }
+}
+
+function renderMogger(data) {
+  if (data.no_color_match) {
+    moggerBody.innerHTML = `
+      <div class="mg-archetype">No match <span class="path-tag path-fallback">⟳ TIER-LIST FALLBACK</span></div>
+      <div class="mg-source">${escapeHtml(data.format || "")} &middot; colors requested: ${(data.colors_requested || []).join("") || "?"}</div>
+      <div class="mg-error" style="text-align:left;padding:14px 16px;">${escapeHtml(data.reasoning || "")}</div>
+      <button id="mg-back-btn" class="mg-back">&larr; build another</button>
+    `;
+    document.getElementById("mg-back-btn").addEventListener("click", renderMoggerForm);
+    return;
+  }
+  const unverifiedNote = data.collection_checked === false
+    ? '<div class="mg-unverified">⚠ no local collection/ownership data exists for this account &mdash; every card below is UNVERIFIED, not confirmed owned.</div>'
+    : "";
+  const missingList = (data.missing_cards || []).length
+    ? `<div class="mg-missing-list">${data.missing_cards.map(c => escapeHtml(c.name) + (c.status ? ` (${escapeHtml(c.status)})` : "")).join("<br>")}</div>`
+    : "";
+  const nonArenaNote = (data.non_arena_cards || []).length
+    ? `<div class="mg-unverified" style="border-color:var(--red);color:var(--red);">⚠ ${data.non_arena_cards.length} card(s) have no known Arena printing and will likely fail to import: ${data.non_arena_cards.map(escapeHtml).join(", ")}</div>`
+    : "";
+  const isAi = data.path === "ai";
+  const pathTag = isAi
+    ? `<span class="path-tag path-ai">⚡ AI-GENERATED (${escapeHtml(data.model || "claude")})</span>`
+    : `<span class="path-tag path-fallback">⟳ TIER-LIST FALLBACK</span>`;
+  const fallbackNote = (!isAi && data.fallback_reason)
+    ? `<div class="mg-unverified">⚠ AI generation was attempted first and failed, so this is the scraped-tier-list fallback. Reason: ${escapeHtml(data.fallback_reason)}</div>`
+    : "";
+  const sourceLine = isAi
+    ? `${escapeHtml(data.format || "")} &middot; ${escapeHtml(String(data.size || ""))} cards &middot; reasoned over your real match history + legal card pool`
+    : `${escapeHtml(data.format || "")} &middot; ${escapeHtml(String(data.size || ""))} cards &middot; source: <a href="${escapeHtml(data.source_url || '#')}" target="_blank" rel="noopener">${escapeHtml(data.source_url || "unknown")}</a>`;
+  moggerBody.innerHTML = `
+    <div class="mg-archetype">${escapeHtml(data.archetype || "?")}${data.tier ? `<span class="tier-tag">TIER ${escapeHtml(String(data.tier))}</span>` : ""} ${pathTag}</div>
+    <div class="mg-source">${sourceLine}</div>
+    ${fallbackNote}
+    <div class="mg-reasoning">${escapeHtml(data.reasoning || "")}</div>
+    ${unverifiedNote}
+    ${nonArenaNote}
+    ${missingList}
+    <div class="mg-decklist-wrap">
+      <button id="mogger-copy">COPY</button>
+      <textarea id="mogger-decklist" readonly spellcheck="false">${escapeHtml(data.decklist_text || "")}</textarea>
+    </div>
+    <button id="mg-back-btn" class="mg-back">&larr; build another</button>
+  `;
+  document.getElementById("mg-back-btn").addEventListener("click", renderMoggerForm);
+  document.getElementById("mogger-copy").addEventListener("click", async (e) => {
+    const ta = document.getElementById("mogger-decklist");
+    try {
+      await navigator.clipboard.writeText(ta.value);
+    } catch (err) {
+      ta.select();
+      document.execCommand("copy");
+    }
+    e.target.textContent = "COPIED";
+    e.target.classList.add("copied");
+    setTimeout(() => { e.target.textContent = "COPY"; e.target.classList.remove("copied"); }, 1500);
+  });
+}
+</script>
+</body>
+</html>
